@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CarDealRadar — GTA Bayi Kampanya Takip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0f1215;
+    --bg-panel: #171b1f;
+    --bg-card: #1c2126;
+    --line: #2a3038;
+    --amber: #f4b400;
+    --amber-dim: #7a5c10;
+    --teal: #38c6b4;
+    --text: #e8eaed;
+    --text-dim: #8a9099;
+    --danger: #e5533d;
+    --radius: 10px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+  h1,h2,h3,.display{
+    font-family: 'Barlow Condensed', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .mono{ font-family: 'Space Mono', monospace; }
+
+  /* HEADER */
+  header{
+    background: linear-gradient(180deg, #14181c 0%, #0f1215 100%);
+    border-bottom: 1px solid var(--line);
+    padding: 28px 24px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .radar-sweep{
+    position:absolute; top:-120px; right:-120px; width:300px; height:300px;
+    border-radius:50%;
+    background: conic-gradient(from 0deg, transparent 0deg, rgba(244,180,0,0.18) 25deg, transparent 60deg);
+    animation: spin 4s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg);} }
+  .header-inner{ max-width:1180px; margin:0 auto; display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px; position:relative; z-index:1;}
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-dot{ width:10px; height:10px; border-radius:50%; background:var(--amber); box-shadow:0 0 10px var(--amber); animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .brand h1{ font-size: 32px; font-weight:800; }
+  .brand span{ color: var(--amber); }
+  .tagline{ color:var(--text-dim); font-size:14px; margin-top:2px; }
+  .scan-status{ text-align:right; }
+  .scan-status .label{ font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.08em; }
+  .scan-status .value{ font-size:22px; font-family:'Space Mono',monospace; color:var(--teal); }
+
+  /* FILTER BAR */
+  .filters{
+    max-width:1180px; margin:20px auto 0; padding:0 24px;
+    display:flex; gap:10px; flex-wrap:wrap;
+  }
+  .chip{
+    background: var(--bg-panel);
+    border:1px solid var(--line);
+    color: var(--text-dim);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight:600;
+    cursor:pointer;
+    transition: all .15s ease;
+    white-space:nowrap;
+  }
+  .chip:hover{ border-color: var(--amber-dim); color:var(--text); }
+  .chip.active{ background: var(--amber); border-color:var(--amber); color:#1a1500; }
+
+  main{ max-width:1180px; margin:0 auto; padding: 28px 24px 60px; }
+
+  .section-label{
+    display:flex; align-items:center; gap:10px; margin: 34px 0 14px;
+    color: var(--text-dim); font-size:13px; letter-spacing:0.1em; text-transform:uppercase;
+  }
+  .section-label::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  .grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .card{
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 18px 16px;
+    position:relative;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .card:hover{ border-color: var(--amber-dim); transform: translateY(-2px); }
+  .card .make{ font-size:11px; color:var(--teal); font-weight:700; letter-spacing:0.08em; text-transform:uppercase; }
+  .card .model{ font-size:22px; font-weight:700; font-family:'Barlow Condensed',sans-serif; text-transform:uppercase; margin:2px 0 8px; }
+  .card .offer-value{
+    font-family:'Space Mono',monospace; font-size:26px; color:var(--amber); font-weight:700;
+  }
+  .card .offer-type{ font-size:12px; color:var(--text-dim); margin-bottom:10px; }
+  .card .meta{ display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px dashed var(--line); font-size:11px; color:var(--text-dim); }
+  .badge{ background:rgba(244,180,0,0.1); color:var(--amber); padding:2px 8px; border-radius:5px; font-weight:600; }
+
+  .placeholder-card{
+    background: repeating-linear-gradient(135deg, var(--bg-card), var(--bg-card) 10px, #1a1e23 10px, #1a1e23 20px);
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;
+    min-height: 150px;
+    color: var(--text-dim);
+  }
+  .placeholder-card .make{ font-size:11px; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-dim); margin-bottom:6px;}
+  .placeholder-card strong{ color:var(--text); font-family:'Barlow Condensed'; font-size:18px; }
+
+  footer{
+    border-top:1px solid var(--line);
+    padding: 20px 24px 40px;
+    text-align:center;
+    color: var(--text-dim);
+    font-size: 12px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .disclaimer{ max-width:700px; margin:10px auto 0; line-height:1.5; }
+
+  @media (max-width:600px){
+    .brand h1{ font-size:24px; }
+    .scan-status{ text-align:left; }
+    .header-inner{ flex-direction:column; align-items:flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="radar-sweep"></div>
+  <div class="header-inner">
+    <div>
+      <div class="brand">
+        <div class="brand-dot"></div>
+        <h1>CarDeal<span>Radar</span></h1>
+      </div>
+      <div class="tagline">GTA'daki 10 büyük markanın güncel bayi kampanyaları — tek ekranda</div>
+    </div>
+    <div class="scan-status">
+      <div class="label">Son tarama</div>
+      <div class="value" id="scanTime">04 Tem 2026</div>
+    </div>
+  </div>
+</header>
+
+<div class="filters" id="filterBar"></div>
+
+<main>
+  <div class="section-label">Aktif kampanyalar (ABD + Kanada, otomatik taranır)</div>
+  <div class="grid" id="offerGrid"></div>
+</main>
+
+<footer>
+  <div>CarDealRadar — decoforge3d tarafından geliştirilmektedir.</div>
+  <div class="disclaimer">
+    Gösterilen tutarlar, üreticilerin (OEM) ABD ve Kanada seviyesindeki resmi kampanya sayfalarından otomatik taranır; bölgeye, bayiye ve kredi onayına göre değişebilir.
+    Kesin rakamlar için ilgili bayi ile teyitleşin. Bu site resmi marka temsilcisi değildir.
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+// =====================================================================
+// VERİ KAYNAĞI: Google Sheets (yayınlanmış CSV)
+// -----------------------------------------------------------------
+// 1. Google Sheets'te şu sütun başlıklarıyla bir tablo oluştur:
+//      make | model | value | type | updated
+//    Örnek satır: Toyota | RAV4 Hybrid | $2.000 | Nakit iade | 2026-07-04
+// 2. Dosya > Paylaş > Web'de yayınla > CSV formatını seç > Yayınla
+// 3. Sana verilen linki aşağıdaki SHEET_CSV_URL değişkenine yapıştır
+// 4. Artık tabloyu her güncellediğinde (Enter'a bastığın an) site birkaç
+//    dakika içinde otomatik güncellenir — kod dokunmana gerek yok.
+// =====================================================================
+const SHEET_CSV_URL = "PASTE_YOUR_PUBLISHED_GOOGLE_SHEET_CSV_LINK_HERE"; // opsiyonel, elle ek girişler için
+const OFFERS_JSON_URL = "./offers.json"; // scraper.py + GitHub Actions tarafından otomatik üretilir/güncellenir
+
+// Google Sheet bağlanana kadar site boş kalmasın diye örnek/yedek veri.
+// (Gerçek Toyota/Honda/Ford Kanada kampanyaları, Temmuz 2026)
+const fallbackOffers = [
+  { make: "Toyota", model: "bZ Woodland (Electric)", value: "$5.500", type: "Nakit iade (rebate)", updated: "2026-07-01" },
+  { make: "Toyota", model: "Tundra Hybrid", value: "$5.000", type: "Nakit iade", updated: "2026-07-01" },
+  { make: "Toyota", model: "C-HR SE / XSE", value: "$10.000", type: "Stackable Cash + EVAP", updated: "2026-06-30" },
+  { make: "Honda", model: "Prologue (Electric)", value: "$7.500", type: "Nakit iade + peşinat desteği", updated: "2026-07-06" },
+  { make: "Honda", model: "Ridgeline", value: "$2.000", type: "Peşinat desteği (sadakat)", updated: "2026-07-06" },
+  { make: "Ford", model: "F-150 Lightning (Electric)", value: "$10.500", type: "Nakit iade", updated: "2026-07-01" },
+  { make: "Ford", model: "Mustang Mach-E (Electric)", value: "$9.000", type: "Nakit iade", updated: "2026-07-01" },
+];
+
+let offers = fallbackOffers;
+
+async function loadOffersFromJson(){
+  try{
+    const res = await fetch(OFFERS_JSON_URL + "?t=" + Date.now());
+    if(!res.ok) throw new Error("offers.json bulunamadı");
+    const data = await res.json();
+    if(data.offers && data.offers.length){
+      offers = data.offers;
+      document.getElementById('scanTime').textContent = (data.last_updated || "").slice(0,10) || "—";
+      return true;
+    }
+  }catch(e){
+    console.warn("offers.json henüz yok (scraper ilk kez çalışmamış olabilir):", e.message);
+  }
+  return false;
+}
+
+async function loadOffersFromSheet(){
+  if(!SHEET_CSV_URL || SHEET_CSV_URL.startsWith("PASTE_")){
+    return;
+  }
+  try{
+    const res = await fetch(SHEET_CSV_URL + "&t=" + Date.now()); // cache-busting
+    const csvText = await res.text();
+    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    if(parsed.data && parsed.data.length){
+      const manual = parsed.data.map(r => ({
+        make: r.make?.trim(),
+        model: r.model?.trim(),
+        value: r.value?.trim(),
+        type: r.type?.trim(),
+        updated: r.updated?.trim(),
+      })).filter(o => o.make && o.model);
+      offers = [...manual, ...offers]; // elle eklenenler otomatik verinin önüne
+    }
+  }catch(e){
+    console.error("Sheet okunamadı:", e);
+  }
+}
+
+async function init(){
+  const gotAutoData = await loadOffersFromJson();
+  if(!gotAutoData) offers = fallbackOffers; // scraper hiç çalışmadıysa yedek veri göster
+  await loadOffersFromSheet(); // elle eklenen ekstra teklifler varsa üstüne ekle
+  renderFilters();
+  renderOffers(offers);
+}
+
+function renderOffers(list){
+  const grid = document.getElementById('offerGrid');
+  grid.innerHTML = list.map(o => `
+    <div class="card" data-make="${o.make}">
+      <div class="make">${o.make}${o.country ? ' · ' + o.country : ''}</div>
+      <div class="model">${o.model}</div>
+      <div class="offer-value">${o.value}</div>
+      <div class="offer-type">${o.type}</div>
+      <div class="meta">
+        <span class="badge">Aktif</span>
+        <span class="mono">${o.updated}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderFilters(){
+  const makes = ["Tümü", ...new Set(offers.map(o => o.make))];
+  const bar = document.getElementById('filterBar');
+  bar.innerHTML = makes.map((m,i) => `<div class="chip ${i===0?'active':''}" data-make="${m}">${m}</div>`).join('');
+  bar.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      bar.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      const m = chip.dataset.make;
+      renderOffers(m === "Tümü" ? offers : offers.filter(o => o.make === m));
+    });
+  });
+}
+
+init(); // offers.json (otomatik, ABD+Kanada tüm markalar) + Google Sheet (opsiyonel elle ekleme) yükle
+</script>
+
+</body>
+</html>
