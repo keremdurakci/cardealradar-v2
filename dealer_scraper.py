@@ -34,13 +34,13 @@ from playwright.sync_api import sync_playwright
 
 # GTA Toyota bayileri - promosyon/current-offers sayfaları
 DEALERS = [
-    {"name": "Maple Toyota",        "city": "Vaughan",     "province": "ON", "url": "https://www.mapletoyota.com/promotions"},
+    {"name": "Maple Toyota",        "city": "Vaughan",     "province": "ON", "url": "https://www.mapletoyota.com/our-promotions.html"},
     {"name": "Don Valley North Toyota", "city": "Markham",  "province": "ON", "url": "https://www.donvalleynorthtoyota.com/specials/new-specials/"},
-    {"name": "Downtown Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.downtowntoyota.ca/specials/new-specials/"},
-    {"name": "Toyota On The Park",  "city": "Toronto",     "province": "ON", "url": "https://www.toyotaonthepark.ca/specials/new-specials/"},
-    {"name": "Ken Shaw Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.kenshawtoyota.ca/specials/new-specials/"},
-    {"name": "Scarborough Toyota",  "city": "Toronto",     "province": "ON", "url": "https://www.scarboroughtoyota.ca/specials/new-specials/"},
-    {"name": "Erin Park Toyota",    "city": "Mississauga", "province": "ON", "url": "https://www.erinparktoyota.com/en/specials/new-specials"},
+    {"name": "Downtown Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.downtowntoyota.ca/our-promotions.html"},
+    {"name": "Toyota On The Park",  "city": "Toronto",     "province": "ON", "url": "https://www.toyotaonthepark.ca/our-promotions.html"},
+    {"name": "Ken Shaw Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.kenshawtoyota.ca/our-promotions.html"},
+    {"name": "Scarborough Toyota",  "city": "Toronto",     "province": "ON", "url": "https://www.scarboroughtoyota.ca/our-promotions.html"},
+    {"name": "Erin Park Toyota",    "city": "Mississauga", "province": "ON", "url": "https://www.erinparktoyota.com/our-promotions.html"},
     {"name": "Yorkdale Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.yorkdaletoyota.com/our-promotions.html"},
 ]
 
@@ -67,58 +67,94 @@ def fetch_page_text(url: str) -> str:
 
 def parse_dealer_offers(dealer: dict, raw_text: str) -> list[dict]:
     """
-    Bayi sayfasındaki her 'model + haftalık ödeme + APR + vade' bloğunu
-    yakalamaya çalışır. Gerçek sayfa yapıları farklılık gösterebileceği
-    için bu regex'ler ilk çalıştırmadan sonra ayarlanmalı.
+    Gerçek bayi sayfası formatı (Maple Toyota'dan doğrulandı, PBS/Dealer.com
+    tabanlı çoğu Ontario Toyota bayisinde benzer şablon kullanılıyor):
+
+      "Lease for $109 + HST weekly 60 Months @ 5.39% APR With $0 down
+       20000 kms/yr Includes $5,000 Cash Incentive + $2,500 EVAP Rebate*"
+
+    Model adı genelde bu satırın HEMEN ÜSTÜNDE ayrı bir başlık olarak
+    geçiyor (fiyat satırıyla aynı cümlede değil) - bu yüzden metni satır
+    satır tarayıp "en son görülen model adını" hafızada tutuyoruz.
     """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lines = raw_text.split("\n")
     results = []
-    chunks = re.split(r'(?<=[.\n])', raw_text)
+    current_model = None
+    current_year = TODAY.year
 
-    for chunk in chunks:
-        model_found = next((m for m in MODELS if m.lower() in chunk.lower()), None)
-        if not model_found:
-            continue
+    lease_pattern = re.compile(
+        r"Lease for \$(\d{2,4}).{0,20}?weekly\s*(\d{2,3})\s*Months?\s*@\s*(\d+\.\d+)%\s*APR"
+        r"(?:.{0,20}?\$(\d{1,3}(?:,\d{3})?)\s*down)?"
+        r"(?:.{0,20}?(\d{4,6})\s*kms?/yr)?",
+        re.I
+    )
+    finance_pattern = re.compile(
+        r"Finance for \$(\d{2,4}).{0,20}?weekly.{0,30}?@\s*(\d+\.\d+)%\s*APR",
+        re.I
+    )
+    cash_incentive_pattern = re.compile(r"\$(\d{1,3}(?:,\d{3})?)\s*(Cash Incentive|EVAP Rebate)", re.I)
 
-        # Örnek: "$105 * / wk" veya "$105/week" veya "$105 Weekly"
-        payment_match = re.search(r"\$(\d{2,4})\s*\*?\s*/?\s*(wk|week|weekly|bi-weekly)", chunk, re.I)
-        apr_match = re.search(r"(\d\.\d{1,2})\s*%", chunk)
-        term_match = re.search(r"(\d{2,3})\s*month", chunk, re.I)
-        down_match = re.search(r"\$([\d,]{3,6})\s*(down|due at signing)", chunk, re.I)
-        year_match = re.search(r"20(2[4-9]|3[0-1])", chunk)  # 2024-2031 arası model yılı
+    for line in lines:
+        # Bu satırda bir model adı geçiyor mu (yıl + model ismi birlikte)?
+        year_model_match = re.search(r"(20(2[4-9]|3[0-1]))\s+([A-Za-z][A-Za-z0-9\- ]{2,20})", line)
+        model_only_match = next((m for m in MODELS if m.lower() in line.lower()), None)
+        if model_only_match:
+            current_model = model_only_match
+            if year_model_match:
+                current_year = int(year_model_match.group(1))
 
-        if not payment_match:
-            continue  # ödeme bilgisi yoksa güvenilir bir teklif sayılmaz, atla
+        lease_match = lease_pattern.search(line)
+        finance_match = finance_pattern.search(line)
 
-        year = int(year_match.group()) if year_match else TODAY.year
-        offer_id = make_id(dealer["name"], year, "toyota", model_found, "base")
+        if lease_match and current_model:
+            amount, term, apr, down, kms = lease_match.groups()
+            cash = cash_incentive_pattern.findall(line)
+            cash_note = "; ".join(f"${c[0]} {c[1]}" for c in cash) if cash else ""
+            results.append({
+                "id": make_id(dealer["name"], current_year, "toyota", current_model, "base"),
+                "year": current_year,
+                "make": "Toyota",
+                "model": current_model,
+                "trim": "",
+                "offerType": "Lease",
+                "payment": {"amount": int(amount), "currency": "CAD", "frequency": "weekly"},
+                "apr": float(apr),
+                "termMonths": int(term),
+                "downPayment": int(down.replace(",", "")) if down else 0,
+                "kmPerYear": int(kms) if kms else None,
+                "expiry": None,
+                "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
+                "image": "",
+                "offerUrl": dealer["url"],
+                "notes": cash_note,
+            })
+        elif finance_match and current_model:
+            amount, apr = finance_match.groups()
+            results.append({
+                "id": make_id(dealer["name"], current_year, "toyota", current_model, "base"),
+                "year": current_year,
+                "make": "Toyota",
+                "model": current_model,
+                "trim": "",
+                "offerType": "Finance",
+                "payment": {"amount": int(amount), "currency": "CAD", "frequency": "weekly"},
+                "apr": float(apr),
+                "termMonths": None,
+                "downPayment": None,
+                "kmPerYear": None,
+                "expiry": None,
+                "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
+                "image": "",
+                "offerUrl": dealer["url"],
+                "notes": "",
+            })
 
-        results.append({
-            "id": offer_id,
-            "year": year,
-            "make": "Toyota",
-            "model": model_found,
-            "trim": "",  # bayi sayfasından trim çıkarımı güvenilir değil, elle tamamlanabilir
-            "offerType": "Lease" if "lease" in chunk.lower() else "Finance",
-            "payment": {
-                "amount": int(payment_match.group(1)),
-                "currency": "CAD",
-                "frequency": "weekly" if "wk" in payment_match.group(2).lower() or "week" in payment_match.group(2).lower() else "bi-weekly",
-            },
-            "apr": float(apr_match.group(1)) if apr_match else None,
-            "termMonths": int(term_match.group(1)) if term_match else None,
-            "downPayment": int(down_match.group(1).replace(",", "")) if down_match else None,
-            "kmPerYear": None,  # sayfa yapısına göre elle eklenmesi gerekebilir
-            "expiry": None,     # çoğu bayi "ay sonu" der, kesin tarih nadiren yazılı olur
-            "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
-            "image": "",  # elle doldurulacak / placeholder gösterilecek
-            "offerUrl": dealer["url"],
-        })
-
-    # Aynı model için birden fazla eşleşme varsa, en yüksek bilgiye sahip olanı tut
+    # Aynı model+tip için birden fazla eşleşme varsa ilkini tut (genelde en güncel/üstteki)
     dedup = {}
     for r in results:
-        key = (r["dealer"]["name"], r["model"])
-        if key not in dedup or (r["apr"] and not dedup[key]["apr"]):
+        key = (r["model"], r["offerType"])
+        if key not in dedup:
             dedup[key] = r
     return list(dedup.values())
 
