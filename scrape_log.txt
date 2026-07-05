@@ -1,16 +1,10 @@
 [OK] Maple Toyota: 0 teklif
-[HATA] Don Valley North Toyota: Page.goto: Timeout 30000ms exceeded.
-Call log:
-  - navigating to "https://www.donvalleynorthtoyota.com/specials/new-specials/", waiting until "networkidle"
-
-[HATA] Downtown Toyota: Page.goto: Timeout 30000ms exceeded.
-Call log:
-  - navigating to "https://www.downtowntoyota.ca/our-promotions.html", waiting until "networkidle"
-
+[OK] Don Valley North Toyota: 0 teklif
+[OK] Downtown Toyota: 0 teklif
 [OK] Toyota On The Park: 0 teklif
-[HATA] Ken Shaw Toyota: Page.goto: Timeout 30000ms exceeded.
+[HATA] Ken Shaw Toyota: Page.goto: Timeout 45000ms exceeded.
 Call log:
-  - navigating to "https://www.kenshawtoyota.ca/our-promotions.html", waiting until "networkidle"
+  - navigating to "https://www.kenshawtoyota.ca/our-promotions.html", waiting until "load"
 
 [OK] Scarborough Toyota: 0 teklif
 [OK] Erin Park Toyota: 0 teklif
