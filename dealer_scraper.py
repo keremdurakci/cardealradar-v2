@@ -36,7 +36,7 @@ from playwright.sync_api import sync_playwright
 DEALERS = [
     {"name": "Maple Toyota",        "city": "Vaughan",     "province": "ON", "url": "https://www.mapletoyota.com/our-promotions.html"},
     {"name": "Don Valley North Toyota", "city": "Markham",  "province": "ON", "url": "https://www.donvalleynorthtoyota.com/specials/new-specials/"},
-    {"name": "Downtown Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.downtowntoyota.ca/our-promotions.html"},
+    {"name": "Downtown Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.downtowntoyota.ca/new-vehicle-offers/"},
     {"name": "Toyota On The Park",  "city": "Toronto",     "province": "ON", "url": "https://www.toyotaonthepark.ca/our-promotions.html"},
     {"name": "Ken Shaw Toyota",     "city": "Toronto",     "province": "ON", "url": "https://www.kenshawtoyota.ca/our-promotions.html"},
     {"name": "Scarborough Toyota",  "city": "Toronto",     "province": "ON", "url": "https://www.scarboroughtoyota.ca/our-promotions.html"},
@@ -59,7 +59,11 @@ def fetch_page_text(url: str) -> str:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(locale="en-CA")
-        page.goto(url, timeout=30000, wait_until="networkidle")
+        # "networkidle" bazı sitelerde hiç tetiklenmiyor (sürekli arka plan
+        # trafiği - chat widget, analytics vb.) - bu yüzden "load" + sabit
+        # bekleme kullanıyoruz, daha güvenilir.
+        page.goto(url, timeout=45000, wait_until="load")
+        page.wait_for_timeout(4000)  # JS ile geç yüklenen fiyat bloklarının oturması için
         text = page.inner_text("body")
         browser.close()
         return text
@@ -67,90 +71,62 @@ def fetch_page_text(url: str) -> str:
 
 def parse_dealer_offers(dealer: dict, raw_text: str) -> list[dict]:
     """
-    Gerçek bayi sayfası formatı (Maple Toyota'dan doğrulandı, PBS/Dealer.com
-    tabanlı çoğu Ontario Toyota bayisinde benzer şablon kullanılıyor):
+    Farklı bayiler farklı CMS kullanıyor, farklı kelimelerle yazıyor:
+      - Maple Toyota (PBS):    "Lease for $109 + HST weekly 60 Months @ 5.39% APR"
+      - Downtown Toyota (eDealer): "Lease For Only: $84* Weekly at 6.99% APR With: $1,500 Down* For 48 Months"
 
-      "Lease for $109 + HST weekly 60 Months @ 5.39% APR With $0 down
-       20000 kms/yr Includes $5,000 Cash Incentive + $2,500 EVAP Rebate*"
-
-    Model adı genelde bu satırın HEMEN ÜSTÜNDE ayrı bir başlık olarak
-    geçiyor (fiyat satırıyla aynı cümlede değil) - bu yüzden metni satır
-    satır tarayıp "en son görülen model adını" hafızada tutuyoruz.
+    Bu yüzden tek, esnek bir çekirdek kalıp kullanıyoruz: "$TUTAR ... Weekly ... X.XX% APR"
+    - bağlayıcı kelimeler (for, only, at, +, HST, with) ne olursa olsun yakalar.
+    "Down" ve "Months" bilgisini ayrıca, eşleşmenin yakın çevresinde (±120 karakter) arıyoruz.
     """
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    lines = raw_text.split("\n")
+    flat = re.sub(r"\s+", " ", raw_text)  # tüm satır sonları/çoklu boşluklar -> tek boşluk
+
+    # Çekirdek desen: $tutar + (Weekly bağlamı) + X.XX% APR - bağlayıcı kelimelerden bağımsız
+    core_pattern = re.compile(
+        r"\$(\d{2,4})\*?\s*(?:\+\s*HST\s*)?(?:Weekly|weekly)\b.{0,60}?(\d+\.\d{1,2})\s*%\s*APR",
+        re.I
+    )
+    down_pattern = re.compile(r"\$?(\d{1,3}(?:,\d{3})?)\s*Down", re.I)
+    term_pattern = re.compile(r"(?:For\s*)?(\d{2,3})\s*Months?", re.I)
+    kms_pattern = re.compile(r"(\d{4,6})\s*kms?\s*/?\s*(?:yr|year)?", re.I)
+
+    def find_nearest_model(pos: int) -> str | None:
+        window = flat[max(0, pos - 150):pos]
+        found = [m for m in MODELS if m.lower() in window.lower()]
+        return found[-1] if found else None  # metinde en sona (fiyata) en yakın olanı al
+
     results = []
-    current_model = None
-    current_year = TODAY.year
+    for match in core_pattern.finditer(flat):
+        model = find_nearest_model(match.start())
+        if not model:
+            continue
 
-    lease_pattern = re.compile(
-        r"Lease for \$(\d{2,4}).{0,20}?weekly\s*(\d{2,3})\s*Months?\s*@\s*(\d+\.\d+)%\s*APR"
-        r"(?:.{0,20}?\$(\d{1,3}(?:,\d{3})?)\s*down)?"
-        r"(?:.{0,20}?(\d{4,6})\s*kms?/yr)?",
-        re.I
-    )
-    finance_pattern = re.compile(
-        r"Finance for \$(\d{2,4}).{0,20}?weekly.{0,30}?@\s*(\d+\.\d+)%\s*APR",
-        re.I
-    )
-    cash_incentive_pattern = re.compile(r"\$(\d{1,3}(?:,\d{3})?)\s*(Cash Incentive|EVAP Rebate)", re.I)
+        amount, apr = match.groups()
+        # Bazı bayilerde (Maple gibi) "60 Months" eşleşmenin İÇİNDE (weekly-APR arası),
+        # bazılarında (Downtown gibi) eşleşmeden SONRA geçiyor - ikisini de tara.
+        search_area = match.group(0) + " " + flat[match.end():match.end() + 120]
+        down_match = down_pattern.search(search_area)
+        term_match = term_pattern.search(search_area)
+        kms_match = kms_pattern.search(search_area)
 
-    for line in lines:
-        # Bu satırda bir model adı geçiyor mu (yıl + model ismi birlikte)?
-        year_model_match = re.search(r"(20(2[4-9]|3[0-1]))\s+([A-Za-z][A-Za-z0-9\- ]{2,20})", line)
-        model_only_match = next((m for m in MODELS if m.lower() in line.lower()), None)
-        if model_only_match:
-            current_model = model_only_match
-            if year_model_match:
-                current_year = int(year_model_match.group(1))
+        results.append({
+            "id": make_id(dealer["name"], TODAY.year, "toyota", model, "base"),
+            "year": TODAY.year,
+            "make": "Toyota",
+            "model": model,
+            "trim": "",
+            "offerType": "Lease",
+            "payment": {"amount": int(amount), "currency": "CAD", "frequency": "weekly"},
+            "apr": float(apr),
+            "termMonths": int(term_match.group(1)) if term_match else None,
+            "downPayment": int(down_match.group(1).replace(",", "")) if down_match else 0,
+            "kmPerYear": int(kms_match.group(1)) if kms_match else None,
+            "expiry": None,
+            "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
+            "image": "",
+            "offerUrl": dealer["url"],
+        })
 
-        lease_match = lease_pattern.search(line)
-        finance_match = finance_pattern.search(line)
-
-        if lease_match and current_model:
-            amount, term, apr, down, kms = lease_match.groups()
-            cash = cash_incentive_pattern.findall(line)
-            cash_note = "; ".join(f"${c[0]} {c[1]}" for c in cash) if cash else ""
-            results.append({
-                "id": make_id(dealer["name"], current_year, "toyota", current_model, "base"),
-                "year": current_year,
-                "make": "Toyota",
-                "model": current_model,
-                "trim": "",
-                "offerType": "Lease",
-                "payment": {"amount": int(amount), "currency": "CAD", "frequency": "weekly"},
-                "apr": float(apr),
-                "termMonths": int(term),
-                "downPayment": int(down.replace(",", "")) if down else 0,
-                "kmPerYear": int(kms) if kms else None,
-                "expiry": None,
-                "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
-                "image": "",
-                "offerUrl": dealer["url"],
-                "notes": cash_note,
-            })
-        elif finance_match and current_model:
-            amount, apr = finance_match.groups()
-            results.append({
-                "id": make_id(dealer["name"], current_year, "toyota", current_model, "base"),
-                "year": current_year,
-                "make": "Toyota",
-                "model": current_model,
-                "trim": "",
-                "offerType": "Finance",
-                "payment": {"amount": int(amount), "currency": "CAD", "frequency": "weekly"},
-                "apr": float(apr),
-                "termMonths": None,
-                "downPayment": None,
-                "kmPerYear": None,
-                "expiry": None,
-                "dealer": {"name": dealer["name"], "city": dealer["city"], "province": dealer["province"]},
-                "image": "",
-                "offerUrl": dealer["url"],
-                "notes": "",
-            })
-
-    # Aynı model+tip için birden fazla eşleşme varsa ilkini tut (genelde en güncel/üstteki)
     dedup = {}
     for r in results:
         key = (r["model"], r["offerType"])
