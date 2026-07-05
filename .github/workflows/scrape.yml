@@ -1,12 +1,8 @@
-name: Bayi kampanya verisini otomatik güncelle
-
-# .github/workflows/scrape.yml
-# Günde 1 kez otomatik çalışır, offers.json'u günceller, commit+push yapar.
-# Vercel bu push'u görünce siteyi otomatik yeniden yayınlar.
+name: Bayi kampanya verisini otomatik guncelle
 
 on:
   schedule:
-    - cron: "0 8 * * *"   # Her gün UTC 08:00 (Toronto ~04:00), GÜNDE 1 KEZ
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Repo'yu indir
+      - name: Repo yu indir
         uses: actions/checkout@v4
 
       - name: Python kur
@@ -27,13 +23,13 @@ jobs:
           pip install playwright
           playwright install --with-deps chromium
 
-      - name: Scraper'ı çalıştır
+      - name: Scraper i calistir
         run: python dealer_scraper.py
 
-      - name: Değişiklikleri commit'le
+      - name: Degisiklikleri commit le
         run: |
           git config --global user.name "cardealradar-bot"
           git config --global user.email "bot@cardealradar.ca"
           git add offers.json scrape_log.txt
-          git diff --staged --quiet || git commit -m "Otomatik veri güncellemesi $(date -u +%Y-%m-%d)"
+          git diff --staged --quiet || git commit -m "Otomatik guncelleme"
           git push
