@@ -5,12 +5,12 @@ Call log:
 
 [HATA] Downtown Toyota: Page.goto: Timeout 30000ms exceeded.
 Call log:
-  - navigating to "https://www.downtowntoyota.ca/specials/new-specials/", waiting until "networkidle"
+  - navigating to "https://www.downtowntoyota.ca/our-promotions.html", waiting until "networkidle"
 
 [OK] Toyota On The Park: 0 teklif
 [HATA] Ken Shaw Toyota: Page.goto: Timeout 30000ms exceeded.
 Call log:
-  - navigating to "https://www.kenshawtoyota.ca/specials/new-specials/", waiting until "networkidle"
+  - navigating to "https://www.kenshawtoyota.ca/our-promotions.html", waiting until "networkidle"
 
 [OK] Scarborough Toyota: 0 teklif
 [OK] Erin Park Toyota: 0 teklif
