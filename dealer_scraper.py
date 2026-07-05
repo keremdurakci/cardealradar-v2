@@ -135,10 +135,10 @@ def main():
         except Exception as e:
             log.append(f"[HATA] {dealer['name']}: {e}")
 
-    with open("data/offers.json", "w", encoding="utf-8") as f:
+    with open("offers.json", "w", encoding="utf-8") as f:
         json.dump(all_offers, f, ensure_ascii=False, indent=2)
 
-    with open("data/scrape_log.txt", "w", encoding="utf-8") as f:
+    with open("scrape_log.txt", "w", encoding="utf-8") as f:
         f.write("\n".join(log))
 
     print("\n".join(log))
