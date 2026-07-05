@@ -1,1 +1,40 @@
+name: Kampanya verisini otomatik güncelle (ABD + Kanada, tüm markalar)
+
+# Bu dosya .github/workflows/scrape.yml olarak repo'na eklenmeli.
+# Hiçbir şeye dokunmana gerek yok - GitHub sunucuları GÜNDE 1 KEZ otomatik çalıştırır.
+# ~50 sayfa tarandığı için bu iş 15-25 dakika sürebilir, bu normal.
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # Her gün UTC 08:00 (Toronto saatiyle yaz saatinde 04:00) - GÜNDE SADECE 1 KEZ
+  workflow_dispatch:        # İstersen "Run workflow" butonuyla elle de tetikleyebilirsin
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Repo'yu indir
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Gereksinimleri kur
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Scraper'ı çalıştır (~50 marka/ülke sayfası)
+        run: python scraper.py
+
+      - name: Değişiklikleri commit'le
+        run: |
+          git config --global user.name "cardealradar-bot"
+          git config --global user.email "bot@cardealradar.ca"
+          git add offers.json scrape_log.txt
+          git diff --staged --quiet || git commit -m "Otomatik veri güncellemesi $(date -u +%Y-%m-%d)"
+          git push
 
