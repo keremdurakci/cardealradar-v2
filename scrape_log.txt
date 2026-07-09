@@ -1,6 +1,6 @@
 [OK] Maple Toyota: 0 teklif
 [OK] Don Valley North Toyota: 0 teklif
-[OK] Downtown Toyota: 0 teklif
+[OK] Downtown Toyota: 5 teklif
 [OK] Toyota On The Park: 0 teklif
 [OK] Ken Shaw Toyota: 0 teklif
 [OK] Scarborough Toyota: 0 teklif
